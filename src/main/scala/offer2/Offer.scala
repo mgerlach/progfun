@@ -23,7 +23,7 @@ object Offer {
 
   type Type = Map[String, PropertyAction[Any]]
 
-  def create = Map[String, PropertyAction[Any]]()
+  def create: Type = Map()
 
   def sku(offer: Type) = new SimpleAccess[String](offer, "sku")
 
