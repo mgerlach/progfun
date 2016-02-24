@@ -78,7 +78,9 @@ case class Offer(m: Map[String, Option[Any]]) {
   // GENERIC ACCESS (e.g., CSV mapping) for sequentially adding single values
 
   // TODO add optional map key as second function param
-  // TODO can we use annotations on the vals/defs above and scan those for the string converters?
+
+  // TODO can we use annotations on the vals/defs above and scan those for necessary params and string converters
+  // (to build the accessors map/function, 
 
   private lazy val accessors: String => (Option[Context] => Any) = Map(
     sku.k -> (c => sku),
@@ -90,8 +92,8 @@ case class Offer(m: Map[String, Option[Any]]) {
 
   private def accessor(k: String)(c: Option[Context]) = accessors(k)(c).asInstanceOf[Access[Offer, Any]]
 
-  def accept: String => ((Option[Context], String) => Offer) = Map(
-    price.k -> ((c: Option[Context], v: String) => Try(v.toInt).map(i => accessor(price.k)(c).accept(i)).getOrElse {
+  def acceptRaw: String => ((Option[Context], String) => Offer) = Map(
+    price.k -> ((c: Option[Context], v: String) => Try((v.toDouble * 100).toInt).map(i => accessor(price.k)(c).accept(i)).getOrElse {
       println("Price conversion error: " + v)
       this // ignore invalid price strings, return unmodified offer
     })

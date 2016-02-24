@@ -40,17 +40,15 @@ Try(o6.images.latest.get).getOrElse("Meeeeeep!")
 // generic
 
 val consumeImages: (Option[Context], String) => Offer =
-  o6.accept("images")
+  o6.acceptRaw("images")
 
 val o7 = consumeImages(Option(DE), "NochnBild")
 
-val o8 = o7.accept("price")(Option(DE), "100")
+val o8 = o7.acceptRaw("price")(Option(DE), "100")
 
 o8.price(DE).latest.map(x => x.getClass)
-
 o8.latest("price")(Option(DE)).exists(o => o.isInstanceOf[Int])
-
-o8.accept("price")(Option(Global), "xxx")
+o8.acceptRaw("price")(Option(Global), "xxx")
 o8.latest("sku")(None)
 val o10 = Offer.create
 val a = o10.title(DE)
