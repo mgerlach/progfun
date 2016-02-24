@@ -68,6 +68,7 @@ val o10 = o9.shippingComponents(DE, pp).latest match {
 
 // all
 
+// TODO make member of offer
 def addUpShippingComponents(o: Offer, shippingComponents: Map[Context, Map[PaymentMethod, List[Int]]]): Offer = {
 
   (for {
@@ -87,6 +88,8 @@ val o11 = o9.shippingComponents.latest match {
 }
 
 val o12 = o11.attribute("Color").accept("red").attribute("Color").accept("green")
+
+// generic
 
 o12.latest("shippingCosts")(Option(DE), Option(pp))
 
