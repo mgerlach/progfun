@@ -1,6 +1,7 @@
 package offer4
 
 import context.{Context, Global}
+import paymentmethod.PaymentMethod
 
 import scala.util.Try
 
@@ -75,31 +76,66 @@ case class Offer(m: Map[String, Option[Any]]) {
   def price(c: Context): Access[Offer, Int] =
     CompositeAccess(price, MapAccess(price.latest.getOrElse(Map.empty), c))
 
+  lazy val shippingCosts = TopLevelAccess[Map[Context, Map[PaymentMethod, Int]]]("shippingCosts")
+
+  def shippingCosts(c: Context): Access[Offer, Map[PaymentMethod, Int]] = CompositeAccess(shippingCosts, MapAccess(shippingCosts.latest.getOrElse(Map.empty), c))
+
+  def shippingCosts(c: Context, p: PaymentMethod): Access[Offer, Int] = {
+    val ctxShippingCosts = shippingCosts(c)
+    CompositeAccess(ctxShippingCosts, MapAccess(ctxShippingCosts.latest.getOrElse(Map.empty), p))
+  }
+
+  lazy val shippingComponents = TopLevelAccess[Map[Context, Map[PaymentMethod, List[Int]]]]("shippingComponents")
+
+  def shippingComponents(c: Context): Access[Offer, Map[PaymentMethod, List[Int]]] = CompositeAccess(shippingComponents, MapAccess(shippingComponents.latest.getOrElse(Map.empty), c))
+
+  def shippingComponents(c: Context, p: PaymentMethod): Access[Offer, List[Int]] = {
+    val ctxShippingComponents = shippingComponents(c)
+    CompositeAccess(ctxShippingComponents, MapAccess(ctxShippingComponents.latest.getOrElse(Map.empty), p))
+  }
+
+  def shippingComponent(c: Context, p: PaymentMethod): Access[Offer, Int] = {
+    val ctxPaymShippingComponents = shippingComponents(c, p)
+    CompositeAccess(ctxPaymShippingComponents, ListAccess(ctxPaymShippingComponents.latest.getOrElse(Nil)))
+  }
+
+  lazy val attributes = TopLevelAccess[Map[String, List[String]]]("attributes")
+
+  def attributes(a: String): Access[Offer, List[String]] = CompositeAccess(attributes, MapAccess(attributes.latest.getOrElse(Map.empty), a))
+
+  def attribute(a: String): Access[Offer, String] = {
+    val attrs = attributes(a)
+    CompositeAccess(attrs, ListAccess(attrs.latest.getOrElse(Nil)))
+  }
+
   // GENERIC ACCESS (e.g., CSV mapping) for sequentially adding single values
 
-  // TODO add optional map key as second function param
-
   // TODO can we use annotations on the vals/defs above and scan those for necessary params and string converters
-  // (to build the accessors map/function, 
+  // (to build the accessors map/function, and converting from Strings to values and keys)
 
-  private lazy val accessors: String => (Option[Context] => Any) = Map(
-    sku.k -> (c => sku),
-    title.k -> (c => title(c.getOrElse(Global))),
-    categoryPaths.k -> (c => categoryPath),
-    images.k -> (c => image(c.getOrElse(Global))),
-    price.k -> (c => price(c.getOrElse(Global)))
+  private lazy val accessors: String => ((Option[Context], Option[Any]) => Any) = Map(
+    sku.k -> ((c, k1) => sku),
+    title.k -> ((c, k1) => title(c.getOrElse(Global))),
+    categoryPaths.k -> ((c, k1) => categoryPath),
+    images.k -> ((c, k1) => image(c.getOrElse(Global))),
+    price.k -> ((c, k1) => price(c.getOrElse(Global))),
+    attributes.k -> ((c, a) => attribute(a.get.asInstanceOf[String])), // TODO what about the nse/cc exceptions? Better drop the values? How? Nop-Accessor with Try?
+    shippingComponents.k -> ((c, pm) => shippingComponent(c.getOrElse(Global), pm.get.asInstanceOf[PaymentMethod])), // s.a.
+    shippingCosts.k -> ((c, pm) => shippingCosts(c.getOrElse(Global), pm.get.asInstanceOf[PaymentMethod])) // s.a.
   )
 
-  private def accessor(k: String)(c: Option[Context]) = accessors(k)(c).asInstanceOf[Access[Offer, Any]]
+  private def accessor(k: String)(c: Option[Context], k1: Option[Any]) = accessors(k)(c, k1).asInstanceOf[Access[Offer, Any]]
 
-  def acceptRaw: String => ((Option[Context], String) => Offer) = Map(
-    price.k -> ((c: Option[Context], v: String) => Try((v.toDouble * 100).toInt).map(i => accessor(price.k)(c).accept(i)).getOrElse {
+  def acceptRaw: String => ((Option[Context], Option[Any]) => String => Offer) = Map(
+    // TODO factor out price conversion stuff / or turn into a real function treating price, shippingXXX in the same way
+    price.k -> ((c: Option[Context], k1: Option[Any]) => (v: String) => Try((v.toDouble * 100).toInt).map(i => accessor(price.k)(c, k1).accept(i)).getOrElse {
       println("Price conversion error: " + v)
       this // ignore invalid price strings, return unmodified offer
     })
-  ).withDefault(k => (c, v) => accessor(k)(c).accept(v)) // default taking strings without conversion
 
-  def latest(k: String)(c: Option[Context]): Option[Any] = accessor(k)(c).latest
+  ).withDefault(k => (c: Option[Context], k1: Option[Any]) => (v: String) => accessor(k)(c, k1).accept(v)) // default taking strings without conversion
+
+  def latest(k: String)(c: Option[Context], k1: Option[Any]): Option[Any] = accessor(k)(c, k1).latest
 
   case class TopLevelAccess[V](k: String) extends Access[Offer, V] {
 
