@@ -1,6 +1,6 @@
 import context._
 import offer4.Offer
-import paymentmethod.{PaymentMethod, cod, pp}
+import paymentmethod.PaymentMethod.{cod, pp}
 
 import scala.util.Try
 
@@ -66,33 +66,19 @@ val o10 = o9.shippingComponents(DE, pp).latest match {
     o9.shippingCosts(DE, pp).accept(shippingComponents.sum)
 }
 
-// all
-
-// TODO make member of offer
-def addUpShippingComponents(o: Offer, shippingComponents: Map[Context, Map[PaymentMethod, List[Int]]]): Offer = {
-
-  (for {
-    ctx <- shippingComponents.keys
-    pm <- shippingComponents(ctx).keys
-    sum = shippingComponents(ctx)(pm).sum
-  } yield (ctx, pm, sum))
-    .foldLeft(o)((o, tuple) => tuple match {
-      case (ctx, pm, sum) => o.shippingCosts(ctx, pm).accept(sum)
-    })
-}
-
-val o11 = o9.shippingComponents.latest match {
-  case None => o9
-  case Some(shippingComponents) =>
-    addUpShippingComponents(o9, shippingComponents)
-}
-
+val o11 = o9.sumUpShippingComponents(false)
 val o12 = o11.attribute("Color").accept("red").attribute("Color").accept("green")
-
 // generic
-
 o12.latest("shippingCosts")(Option(DE), Option(pp))
-
 val o13 = o12.acceptRaw("shippingCosts")(Option(DE), Option(cod))("1.99")
+o13.latest("shippingCosts")(Option(DE), Option(cod)).contains(199)
 
-o13.latest("shippingCosts")(Option(DE), Option(cod)).exists(o => o.isInstanceOf[Int])
+// default params for ctx and m
+o13.acceptRaw("sku")()("newSKU")
+o13.acceptRaw("title")(c = Option(DE))("NEUER DE TITEL")
+o13.acceptRaw("attributes")(m = Option("x"))("attr")
+
+// wrong use of m
+o13.acceptRaw("attributes")(Option(DE), Option(1.0))("1.23")
+o13.acceptRaw("shippingCosts")(Option(Global), Option(1.0))("1.99")
+o13.acceptRaw("shippingComponents")(Option(Global), None)("1.99")

@@ -5,15 +5,21 @@ import paymentmethod.PaymentMethod
 
 import scala.util.Try
 
+/**
+  * Property access API.
+  *
+  * @tparam T type of class owning the property represented by the concrete Access instance
+  * @tparam V type of property values at the nesting level of the represented property
+  */
 trait Access[T, V] {
 
   /**
-    * @return the most recent value passed to accept(V), if any.
+    * @return the most recent value passed to accept(V), if any; in case of lists, the last list element (or None if no or empty list).
     */
   def latest: Option[V]
 
   /**
-    * Consumes a value by adding it to the underlying data structure of the current T
+    * Consumes a value by adding it to the underlying data structure of the current T; in case of lists, the value is appended to the list.
     *
     * @param v value
     * @return new T containing v
@@ -21,6 +27,14 @@ trait Access[T, V] {
   def accept(v: V): T
 }
 
+/**
+  * Access to maps.
+  *
+  * @param m underlying map
+  * @param k key of binding to be read/manipulated by the MapAccess instance
+  * @tparam K type of map keys
+  * @tparam V type of map values
+  */
 case class MapAccess[K, V](m: Map[K, V], k: K) extends Access[Map[K, V], V] {
 
   def latest = m.get(k)
@@ -28,13 +42,30 @@ case class MapAccess[K, V](m: Map[K, V], k: K) extends Access[Map[K, V], V] {
   def accept(v: V) = m updated(k, v)
 }
 
+/**
+  * Access to lists.
+  *
+  * @param l underlying list
+  * @tparam V type of list elements
+  */
 case class ListAccess[V](l: List[V]) extends Access[List[V], V] {
 
-  def latest = Try(Option(l.last)).getOrElse(None) // return last, no/empty list yields in None
+  def latest = Try(Option(l.last)).getOrElse(None) // return last, no/empty list yields None
 
   def accept(v: V) = l :+ v // append
 }
 
+/**
+  * Composes two Access instances for use with complex properties. E.g., for a Map[K, List[V] ], a MapAccess instance
+  * and a ListAccess instance can be combined to form an Access instance taking single list elements and inserting them,
+  * using the ListAccess instance, into the list bound to the map key defined by the MapAccess instance.
+  *
+  * @param a1 high level access
+  * @param a2 low level access
+  * @tparam T  type of class owning the property represented by the concrete Access instance
+  * @tparam V1 low level type at a1's level - and high level type at a2's level
+  * @tparam V2 low level type at a2's level - and value type for the composite
+  */
 case class CompositeAccess[T, V1, V2](a1: Access[T, V1], a2: Access[V1, V2]) extends Access[T, V2] {
 
   def latest = a2.latest
@@ -43,7 +74,11 @@ case class CompositeAccess[T, V1, V2](a1: Access[T, V1], a2: Access[V1, V2]) ext
 }
 
 /**
-  * Another OO approach, concentrating on composing accessor/modification functions
+  * Offer built on a map, where the values are wrapped in Option instances. No map binding means the offer property
+  * represented by the map key will not be modified by OS. A map binding with an empty optional means the offer property
+  * will be cleared by OS.
+  *
+  * @param m the map of offer propery options representing the offer
   */
 case class Offer(m: Map[String, Option[Any]]) {
 
@@ -109,46 +144,110 @@ case class Offer(m: Map[String, Option[Any]]) {
   }
 
   // GENERIC ACCESS (e.g., CSV mapping) for sequentially adding single values
+  // Always need k (offer property name or key), c (context, optional, default none),
+  // m (map key, e.g. String (attribute name) or PaymentMethod (shipping), with runtime type checking)
 
-  // TODO can we use annotations on the vals/defs above and scan those for necessary params and string converters
-  // (to build the accessors map/function, and converting from Strings to values and keys)
+  def acceptRaw(k: String)(c: Option[Context] = None, m: Option[Any] = None)(v: String): Offer =
+    k match {
+      case pricePropertiesRE() => acceptWithPriceConversion(k)(c, m)(v)
+      case _ => accessor(k)(c, m).accept(v)
+    }
 
-  private lazy val accessors: String => ((Option[Context], Option[Any]) => Any) = Map(
-    sku.k -> ((c, k1) => sku),
-    title.k -> ((c, k1) => title(c.getOrElse(Global))),
-    categoryPaths.k -> ((c, k1) => categoryPath),
-    images.k -> ((c, k1) => image(c.getOrElse(Global))),
-    price.k -> ((c, k1) => price(c.getOrElse(Global))),
-    attributes.k -> ((c, a) => attribute(a.get.asInstanceOf[String])), // TODO what about the nse/cc exceptions? Better drop the values? How? Nop-Accessor with Try?
-    shippingComponents.k -> ((c, pm) => shippingComponent(c.getOrElse(Global), pm.get.asInstanceOf[PaymentMethod])), // s.a.
-    shippingCosts.k -> ((c, pm) => shippingCosts(c.getOrElse(Global), pm.get.asInstanceOf[PaymentMethod])) // s.a.
+  def latest(k: String)(c: Option[Context] = None, m: Option[Any] = None): Option[Any] = accessor(k)(c, m).latest
+
+  private def accessor(k: String)(c: Option[Context] = Option(Global), m: Option[Any] = None) =
+    accessors(k)(c.get, m).asInstanceOf[Access[Offer, Any]]
+
+  private lazy val accessors: String => ((Context, Option[Any]) => Any) = Map(
+    sku.k -> ((c, m) => sku),
+    title.k -> ((c, m) => title(c)),
+    categoryPaths.k -> ((c, m) => categoryPath),
+    images.k -> ((c, m) => image(c)),
+    price.k -> ((c, m) => price(c)),
+    attributes.k -> ((c, m) => accessorWithTypedKey[String](m, attribute)),
+    shippingComponents.k -> ((c, m) => accessorWithTypedKey[PaymentMethod](m, p => shippingComponent(c, p))),
+    shippingCosts.k -> ((c, m) => accessorWithTypedKey[PaymentMethod](m, p => shippingCosts(c, p)))
   )
 
-  private def accessor(k: String)(c: Option[Context], k1: Option[Any]) = accessors(k)(c, k1).asInstanceOf[Access[Offer, Any]]
+  // Option[Any] => M or dummy accessor with warning
+  private def accessorWithTypedKey[M](m: Option[Any], accessorMethod: M => Access[Offer, _]): Access[Offer, _] =
+    Try(accessorMethod(m.get.asInstanceOf[M])).recover {
+      case e: NoSuchElementException =>
+        println("Empty map key")
+        noAccess
+      case e: ClassCastException =>
+        println("Wrong map key type(" + e + ")")
+        noAccess
+      case _ =>
+        throw new IllegalStateException("should not be here...")
+    }.get
 
-  def acceptRaw: String => ((Option[Context], Option[Any]) => String => Offer) = Map(
-    // TODO factor out price conversion stuff / or turn into a real function treating price, shippingXXX in the same way
-    price.k -> ((c: Option[Context], k1: Option[Any]) => (v: String) => Try((v.toDouble * 100).toInt).map(i => accessor(price.k)(c, k1).accept(i)).getOrElse {
-      println("Price conversion error: " + v)
-      this // ignore invalid price strings, return unmodified offer
-    })
+  // TODO make converters optional (default = identity function) in Access (AbstractAccess)?
+  private val pricePropertiesRE = s"${price.k}|${shippingComponents.k}|${shippingCosts.k}".r
 
-  ).withDefault(k => (c: Option[Context], k1: Option[Any]) => (v: String) => accessor(k)(c, k1).accept(v)) // default taking strings without conversion
+  private def acceptWithPriceConversion(k: String)(c: Option[Context], m: Option[Any])(v: String): Offer = {
+    Try((v.toDouble * 100).toInt).map(i => accessor(k)(c, m).accept(i)).recover {
+      case t: NumberFormatException =>
+        println("Price conversion error for field: " + k + ", raw value: " + v + "(" + t + ")")
+        this // ignore invalid price strings, return unmodified offer
+      case _ =>
+        throw new IllegalStateException("should not be here...")
+    }.get
+  }
 
-  def latest(k: String)(c: Option[Context], k1: Option[Any]): Option[Any] = accessor(k)(c, k1).latest
+  // special stuff
 
+  /**
+    * Sums up Int lists in shippingComponents structure and stores the sums in shippingCosts for each combination of
+    * Context and PaymentMethod (replacing any existing bindings for the according keys, keeping bindings with other keys)
+    *
+    * @param clearShippingCosts if shippingCosts should be cleared before the operation
+    * @return new offer with summed up shippingComponents stored in shippingCosts
+    */
+  def sumUpShippingComponents(clearShippingCosts: Boolean = true): Offer = {
+    val o = if (clearShippingCosts) this.shippingCosts.remove else this
+    o.shippingComponents.latest match {
+      case None => o
+      case Some(sComp) => (for {
+        ctx <- sComp.keys
+        pm <- sComp(ctx).keys
+        sum = sComp(ctx)(pm).sum
+      } yield (ctx, pm, sum))
+        .foldLeft(o)((oAccumulated, tuple) => tuple match {
+          case (ctx, pm, sum) => oAccumulated.shippingCosts(ctx, pm).accept(sum)
+        })
+    }
+  }
+
+  /**
+    * Access instance ignoring any values passed to accept(), returning the unmodified Offer (Offer.this),
+    * and throwing an exception when calling latest().
+    */
+  private lazy val noAccess = new Access[Offer, Any] {
+
+    def accept(v: Any) = Offer.this
+
+    def latest = throw new NoSuchElementException("noAccess.latest")
+  }
+
+  /**
+    * Access class for top level offer properties adding methods for clearing and ignoring the properties.
+    *
+    * @param k top level property name, e.g. title, sku
+    * @tparam V top level type, e.g. String, Map[Context, String], List[String].
+    */
   case class TopLevelAccess[V](k: String) extends Access[Offer, V] {
 
     /**
-      * Returns an Option containing the most recent value passed to consume(T), if any.
+      * The most recent value passed to accept(V), if any.
       * A return value of None (Option) can mean that nothing has been set OR clear() was called to clear the property in OS.
-      * Use isClear() to find out (more explicit and nicer with composite Access objects than working with Optional of Optional).
+      * Use isClear() to find out (more explicit and nicer with composite Access objects than working with Options of Options).
       *
       * @return latest value for our key (offer property), or None if the property is to be ignored or cleared (use isClear() to find out)
       */
     def latest = m.getOrElse(k, None).asInstanceOf[Option[V]]
 
-    def accept(v: V) = Offer(m updated(k, Option(v))) // outer Option indicates modification of property, inner indicates that a value is set
+    def accept(v: V) = Offer(m updated(k, Option(v)))
 
     def clear = Offer(m updated(k, None))
 
