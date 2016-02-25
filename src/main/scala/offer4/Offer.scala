@@ -1,7 +1,8 @@
 package offer4
 
-import context.{Context, Global}
-import paymentmethod.PaymentMethod
+import de.idealo.services.core.bean.PaymentMethod
+import de.idealo.services.core.config.ContextRegistryConfiguration
+import de.idealo.services.core.context.Context
 
 import scala.util.Try
 
@@ -159,7 +160,9 @@ case class Offer(m: Map[String, Option[Any]]) {
 
   def latest(k: String)(c: Option[Context] = Option(defaultContext), m: Option[Any] = None): Option[Any] = accessor(k)(c, m).latest
 
-  private val defaultContext = Global
+  private val contextRegistry = new ContextRegistryConfiguration().contextRegistry
+
+  private val defaultContext = contextRegistry.getGlobal
 
   private val pricePropertiesRE = s"${price.k}|${shippingComponents.k}|${shippingCosts.k}".r
 
