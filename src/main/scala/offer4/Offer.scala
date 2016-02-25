@@ -43,21 +43,21 @@ case class MapAccess[K, V](m: Map[K, V], k: K) extends Access[Map[K, V], V] {
 }
 
 /**
-  * Access to lists.
+  * Access to lists. Mind that latest() will always return the last list element, if the list is non-empty
   *
-  * @param l underlying list
+  * @param l underlying list (must not be null)
   * @tparam V type of list elements
   */
 case class ListAccess[V](l: List[V]) extends Access[List[V], V] {
 
-  def latest = Try(Option(l.last)).getOrElse(None) // return last, no/empty list yields None
+  def latest = if (l.nonEmpty) Option(l.last) else None
 
   def accept(v: V) = l :+ v // append
 }
 
 /**
   * Composes two Access instances for use with complex properties. E.g., for a Map[K, List[V] ], a MapAccess instance
-  * and a ListAccess instance can be combined to form an Access instance taking single list elements and inserting them,
+  * and a ListAccess instance can be combined to form an Access instance accepting single list elements and inserting them,
   * using the ListAccess instance, into the list bound to the map key defined by the MapAccess instance.
   *
   * @param a1 high level access
@@ -113,7 +113,8 @@ case class Offer(m: Map[String, Option[Any]]) {
 
   lazy val shippingCosts = TopLevelAccess[Map[Context, Map[PaymentMethod, Int]]]("shippingCosts")
 
-  def shippingCosts(c: Context): Access[Offer, Map[PaymentMethod, Int]] = CompositeAccess(shippingCosts, MapAccess(shippingCosts.latest.getOrElse(Map.empty), c))
+  def shippingCosts(c: Context): Access[Offer, Map[PaymentMethod, Int]] =
+    CompositeAccess(shippingCosts, MapAccess(shippingCosts.latest.getOrElse(Map.empty), c))
 
   def shippingCosts(c: Context, p: PaymentMethod): Access[Offer, Int] = {
     val ctxShippingCosts = shippingCosts(c)
@@ -122,7 +123,8 @@ case class Offer(m: Map[String, Option[Any]]) {
 
   lazy val shippingComponents = TopLevelAccess[Map[Context, Map[PaymentMethod, List[Int]]]]("shippingComponents")
 
-  def shippingComponents(c: Context): Access[Offer, Map[PaymentMethod, List[Int]]] = CompositeAccess(shippingComponents, MapAccess(shippingComponents.latest.getOrElse(Map.empty), c))
+  def shippingComponents(c: Context): Access[Offer, Map[PaymentMethod, List[Int]]] =
+    CompositeAccess(shippingComponents, MapAccess(shippingComponents.latest.getOrElse(Map.empty), c))
 
   def shippingComponents(c: Context, p: PaymentMethod): Access[Offer, List[Int]] = {
     val ctxShippingComponents = shippingComponents(c)
@@ -136,7 +138,8 @@ case class Offer(m: Map[String, Option[Any]]) {
 
   lazy val attributes = TopLevelAccess[Map[String, List[String]]]("attributes")
 
-  def attributes(a: String): Access[Offer, List[String]] = CompositeAccess(attributes, MapAccess(attributes.latest.getOrElse(Map.empty), a))
+  def attributes(a: String): Access[Offer, List[String]] =
+    CompositeAccess(attributes, MapAccess(attributes.latest.getOrElse(Map.empty), a))
 
   def attribute(a: String): Access[Offer, String] = {
     val attrs = attributes(a)
@@ -147,26 +150,41 @@ case class Offer(m: Map[String, Option[Any]]) {
   // Always need k (offer property name or key), c (context, optional, default none),
   // m (map key, e.g. String (attribute name) or PaymentMethod (shipping), with runtime type checking)
 
-  def acceptRaw(k: String)(c: Option[Context] = None, m: Option[Any] = None)(v: String): Offer =
+  def acceptRaw(k: String)(c: Option[Context] = Option(defaultContext), m: Option[Any] = None)(v: String): Offer =
     k match {
+      // TODO make converters optional (default = identity function) in Access (AbstractAccess) or TopLevelAccess?
       case pricePropertiesRE() => acceptWithPriceConversion(k)(c, m)(v)
       case _ => accessor(k)(c, m).accept(v)
     }
 
-  def latest(k: String)(c: Option[Context] = None, m: Option[Any] = None): Option[Any] = accessor(k)(c, m).latest
+  def latest(k: String)(c: Option[Context] = Option(defaultContext), m: Option[Any] = None): Option[Any] = accessor(k)(c, m).latest
 
-  private def accessor(k: String)(c: Option[Context] = Option(Global), m: Option[Any] = None) =
-    accessors(k)(c.get, m).asInstanceOf[Access[Offer, Any]]
+  private val defaultContext = Global
 
-  private lazy val accessors: String => ((Context, Option[Any]) => Any) = Map(
+  private val pricePropertiesRE = s"${price.k}|${shippingComponents.k}|${shippingCosts.k}".r
+
+  private def acceptWithPriceConversion(k: String)(c: Option[Context], m: Option[Any])(v: String): Offer =
+    Try((v.toDouble * 100).toInt).map(i => accessor(k)(c, m).accept(i)).recover {
+      case t: NumberFormatException =>
+        println("Price conversion error for field: " + k + ", raw value: " + v + "(" + t + ")")
+        this // ignore invalid price strings, return unmodified offer
+      case _ =>
+        throw new IllegalStateException("should not be here...")
+    }.get
+
+  private def accessor(k: String)(c: Option[Context], m: Option[Any]) =
+    accessors(k)(c, m).asInstanceOf[Access[Offer, Any]]
+
+  // TODO can this somehow be compiled with reflection over annotated accessor methods above? Also along with necessary converters? How about the "typed keys"?
+  private lazy val accessors: String => ((Option[Context], Option[Any]) => Any) = Map(
     sku.k -> ((c, m) => sku),
-    title.k -> ((c, m) => title(c)),
+    title.k -> ((c, m) => title(c.getOrElse(defaultContext))),
     categoryPaths.k -> ((c, m) => categoryPath),
-    images.k -> ((c, m) => image(c)),
-    price.k -> ((c, m) => price(c)),
+    images.k -> ((c, m) => image(c.getOrElse(defaultContext))),
+    price.k -> ((c, m) => price(c.getOrElse(defaultContext))),
     attributes.k -> ((c, m) => accessorWithTypedKey[String](m, attribute)),
-    shippingComponents.k -> ((c, m) => accessorWithTypedKey[PaymentMethod](m, p => shippingComponent(c, p))),
-    shippingCosts.k -> ((c, m) => accessorWithTypedKey[PaymentMethod](m, p => shippingCosts(c, p)))
+    shippingComponents.k -> ((c, m) => accessorWithTypedKey[PaymentMethod](m, p => shippingComponent(c.getOrElse(defaultContext), p))),
+    shippingCosts.k -> ((c, m) => accessorWithTypedKey[PaymentMethod](m, p => shippingCosts(c.getOrElse(defaultContext), p)))
   )
 
   // Option[Any] => M or dummy accessor with warning
@@ -181,19 +199,6 @@ case class Offer(m: Map[String, Option[Any]]) {
       case _ =>
         throw new IllegalStateException("should not be here...")
     }.get
-
-  // TODO make converters optional (default = identity function) in Access (AbstractAccess)?
-  private val pricePropertiesRE = s"${price.k}|${shippingComponents.k}|${shippingCosts.k}".r
-
-  private def acceptWithPriceConversion(k: String)(c: Option[Context], m: Option[Any])(v: String): Offer = {
-    Try((v.toDouble * 100).toInt).map(i => accessor(k)(c, m).accept(i)).recover {
-      case t: NumberFormatException =>
-        println("Price conversion error for field: " + k + ", raw value: " + v + "(" + t + ")")
-        this // ignore invalid price strings, return unmodified offer
-      case _ =>
-        throw new IllegalStateException("should not be here...")
-    }.get
-  }
 
   // special stuff
 
