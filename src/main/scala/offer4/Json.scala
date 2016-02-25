@@ -82,22 +82,3 @@ case object OfferDeserializer extends JsonDeserializer[Offer]() {
     }
   }
 }
-
-
-//  val ContextRegistry contextRegistry;
-//
-//  public ContextKeyDeserializer (ContextRegistry contextRegistry) {
-//    this.contextRegistry = contextRegistry;
-//  }
-//
-//  public Context deserializeKey(String key, DeserializationContext ctxt) throws IOException {
-//    Context ctx = this.contextRegistry.getContext(key);
-//    if (ctx == null) {
-//      throw new JsonMappingException(String.format("%s is not a valid context!", new Object[] {
-//        key
-//      }));
-//    } else {
-//      return ctx;
-//    }
-//  }
-//}
