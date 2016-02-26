@@ -2,6 +2,9 @@ package context
 
 import scala.annotation.tailrec
 
+/**
+  * This is how we could do contexts in Scala...
+  */
 sealed trait Context {
   def name: String
 
