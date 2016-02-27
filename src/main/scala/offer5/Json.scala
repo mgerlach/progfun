@@ -8,9 +8,8 @@ import com.fasterxml.jackson.databind._
 import com.fasterxml.jackson.databind.module.SimpleModule
 import com.fasterxml.jackson.databind.ser.std.StdSerializer
 import com.fasterxml.jackson.module.scala.DefaultScalaModule
-import de.idealo.services.core.config.ContextRegistryConfiguration
 import de.idealo.services.core.context.Context
-import de.idealo.services.core.mapper.{ContextKeyDeserializer, ContextSerializer}
+import de.idealo.services.core.mapper.ContextSerializer
 
 import scala.collection.JavaConverters._
 
@@ -21,11 +20,11 @@ object Json {
   val mapper = new ObjectMapper()
   mapper.registerModule(DefaultScalaModule)
   mapper.registerModule(new SimpleModule("ImmutableOffer", new Version(0, 0, 1, null, null, null))
-    .addKeyDeserializer(classOf[Context], new ContextKeyDeserializer(new ContextRegistryConfiguration().contextRegistry()))
+    //.addKeyDeserializer(classOf[Context], new ContextKeyDeserializer(new ContextRegistryConfiguration().contextRegistry()))
     .addKeySerializer(classOf[Context], new ContextSerializer())
     .addSerializer(classOf[Offer], OfferSerializer)
-    .addDeserializer(classOf[Offer], OfferDeserializer))
-
+    .addDeserializer(classOf[Offer], OfferDeserializer)
+    .addSerializer(classOf[Option[Any]], OptionSerializer))
 
   def serialize(value: Any): String = {
     import java.io.StringWriter
@@ -54,12 +53,18 @@ object Json {
   }
 }
 
-case object OfferSerializer extends StdSerializer[Offer](classOf[Offer]) {
+// for top level properties wrapped in Option, either a map
+object OptionSerializer extends StdSerializer[Option[Any]](classOf[Option[Any]]) {
+  def serialize(value: Option[Any], jgen: JsonGenerator, provider: SerializerProvider): Unit =
+    jgen.writeObject(value.map(v => Map("value" -> v)).getOrElse(Map("value" -> null)))
+}
+
+object OfferSerializer extends StdSerializer[Offer](classOf[Offer]) {
 
   def serialize(value: Offer, jgen: JsonGenerator, provider: SerializerProvider): Unit = jgen.writeObject(value.m)
 }
 
-case object OfferDeserializer extends JsonDeserializer[Offer]() {
+object OfferDeserializer extends JsonDeserializer[Offer]() {
   def deserialize(p: JsonParser, ctxt: DeserializationContext): Offer = {
     val n: JsonNode = p.getCodec.readTree(p)
 

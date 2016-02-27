@@ -12,7 +12,7 @@ import scala.util.Try
   * @tparam T type of class owning the property represented by the concrete Access instance
   * @tparam V type of property values at the nesting level of the represented property
   */
-trait Access[T, V] {
+sealed trait Access[T, V] {
 
   /**
     * @return the most recent value passed to accept(V), if any; in case of lists, the last list element (or None if no or empty list).
@@ -26,6 +26,9 @@ trait Access[T, V] {
     * @return new T containing v
     */
   def accept(v: V): T
+
+  // acceptJsonNode(?)
+  // acceptRaw(String) -> on conv error, do not change the objects (Try(...).getOrElse(...) / .recover { case ...})
 }
 
 /**
@@ -36,18 +39,20 @@ trait Access[T, V] {
   * @tparam K type of map keys
   * @tparam V type of map values
   */
-class MapAccess[K, V](m: Map[String, V], k: K)(str: K => String = (k: Any) => k.toString) extends Access[Map[String, V], V] {
+abstract class MapAccess[K, V](m: Map[String, V], k: K, toKeyString: K => String = (k: Any) => k.toString) extends Access[Map[String, V], V] {
 
-  private val keyString: String = str(k)
+  private val keyString: String = toKeyString(k)
 
   def latest = m.get(keyString)
 
   def accept(v: V) = m updated(keyString, v)
 }
 
-case class ContextMapAccess[V](m: Map[String, V], c: Context) extends MapAccess[Context, V](m, c)(c => c.getName)
+case class StringMapAccess[V](m: Map[String, V], s: String) extends MapAccess[String, V](m, s, s => s)
 
-case class PaymentMethodMapAccess[V](m: Map[String, V], p: PaymentMethod) extends MapAccess[PaymentMethod, V](m, p)(p => p.name)
+case class ContextMapAccess[V](m: Map[String, V], c: Context) extends MapAccess[Context, V](m, c, c => c.getName)
+
+case class PaymentMethodMapAccess[V](m: Map[String, V], p: PaymentMethod) extends MapAccess[PaymentMethod, V](m, p, p => p.name)
 
 /**
   * Access to lists. Mind that latest() will always return the last list element, if the list is non-empty
@@ -91,21 +96,20 @@ case class Offer(m: Map[String, Option[Any]]) {
 
   def this() = this(Map())
 
+  lazy val brand = TopLevelAccess[String]("brand")
+
   lazy val sku = TopLevelAccess[String]("sku")
 
   lazy val title = TopLevelAccess[Map[String, String]]("title")
 
   def title(c: Context): Access[Offer, String] =
-    CompositeAccess(title, ContextMapAccess(title.latest.getOrElse(Map.empty), c))
+    new CompositeAccess(title, ContextMapAccess(title.latest.getOrElse(Map.empty), c))
 
-  def title(cs: String): Access[Offer, String] =
-    CompositeAccess(title, ContextMapAccess(title.latest.getOrElse(Map.empty), contextRegistry.getContext(cs)))
+  lazy val categoryPaths = TopLevelAccess[List[String]]("categoryPaths")
 
-  //  lazy val categoryPaths = TopLevelAccess[List[String]]("categoryPaths")
-  //
-  //  lazy val categoryPath: Access[Offer, String] =
-  //    CompositeAccess(categoryPaths, ListAccess(categoryPaths.latest.getOrElse(Nil)))
-  //
+  lazy val categoryPath: Access[Offer, String] =
+    CompositeAccess(categoryPaths, ListAccess(categoryPaths.latest.getOrElse(Nil)))
+
   //  lazy val images = TopLevelAccess[Map[Context, List[String]]]("images")
   //
   //  def images(c: Context): Access[Offer, List[String]] =
@@ -116,10 +120,11 @@ case class Offer(m: Map[String, Option[Any]]) {
   //    CompositeAccess(ctxImages, ListAccess(ctxImages.latest.getOrElse(Nil)))
   //  }
   //
-  //  lazy val price = TopLevelAccess[Map[Context, Int]]("price")
-  //
-  //  def price(c: Context): Access[Offer, Int] =
-  //    CompositeAccess(price, MapAccess(price.latest.getOrElse(Map.empty), c))
+  lazy val price = TopLevelAccess[Map[String, Int]]("price")
+
+  def price(c: Context): Access[Offer, Int] =
+    CompositeAccess(price, ContextMapAccess(price.latest.getOrElse(Map.empty), c))
+
   //
   //  lazy val shippingCosts = TopLevelAccess[Map[Context, Map[PaymentMethod, Int]]]("shippingCosts")
   //
@@ -149,7 +154,7 @@ case class Offer(m: Map[String, Option[Any]]) {
   //  lazy val attributes = TopLevelAccess[Map[String, List[String]]]("attributes")
   //
   //  def attributes(a: String): Access[Offer, List[String]] =
-  //    CompositeAccess(attributes, MapAccess(attributes.latest.getOrElse(Map.empty), a))
+  //    CompositeAccess(attributes, StringMapAccess(attributes.latest.getOrElse(Map.empty), a))
   //
   //  def attribute(a: String): Access[Offer, String] = {
   //    val attrs = attributes(a)
@@ -160,21 +165,11 @@ case class Offer(m: Map[String, Option[Any]]) {
   // Always need k (offer property name or key), c (context, optional, default none),
   // m (map key, e.g. String (attribute name) or PaymentMethod (shipping), with runtime type checking)
 
-  //  def acceptRaw(k: String)(c: Option[Context] = Option(defaultContext), m: Option[Any] = None)(v: String): Offer =
-  //    k match {
-  //      // TODO make converters optional (default = identity function) in Access (AbstractAccess) or TopLevelAccess?
-  //      case pricePropertiesRE() => acceptWithPriceConversion(k)(c, m)(v)
-  //      case _ => accessor(k)(c, m).accept(v)
-  //    }
-
   def acceptRaw(k: String)(c: Option[String] = Option(defaultContext.getName), m: Option[String] = None)(v: String): Offer =
     k match {
-      // TODO make converters optional (default = identity function) in Access (AbstractAccess) or TopLevelAccess?
-      case pricePropertiesRE() => acceptWithPriceConversion(k)(c.map(contextRegistry.getContext), m)(v)
-      case _ => accessor(k)(c.map(contextRegistry.getContext), m).accept(v)
+      case pricePropertiesRE() => acceptWithPriceConversion(k)(c.flatMap(cs => Option(contextRegistry.getContext(cs))), m)(v)
+      case _ => accessor(k)(c.flatMap(cs => Option(contextRegistry.getContext(cs))), m).accept(v)
     }
-
-  //  def latest(k: String)(c: Option[Context] = Option(defaultContext), m: Option[Any] = None): Option[Any] = accessor(k)(c, m).latest
 
   def latest(k: String)(c: Option[String] = Option(defaultContext.getName), m: Option[String] = None): Option[Any] = accessor(k)(c.map(contextRegistry.getContext), m).latest
 
@@ -182,15 +177,15 @@ case class Offer(m: Map[String, Option[Any]]) {
 
   private val defaultContext = contextRegistry.getGlobal
 
-  private val pricePropertiesRE = s"".r //  s"${price.k}|${shippingComponents.k}|${shippingCosts.k}".r
+  private val pricePropertiesRE = s"${price.k}".r //  s"${price.k}|${shippingComponents.k}|${shippingCosts.k}".r
 
   private def acceptWithPriceConversion(k: String)(c: Option[Context], m: Option[Any])(v: String): Offer =
     Try((v.toDouble * 100).toInt).map(i => accessor(k)(c, m).accept(i)).recover {
-      case t: NumberFormatException =>
-        println("Price conversion error for field: " + k + ", raw value: " + v + "(" + t + ")")
+      case e: NumberFormatException =>
+        println("Price conversion error for field: " + k + ", raw value: " + v + "(" + e + ")")
         this // ignore invalid price strings, return unmodified offer
-      case _ =>
-        throw new IllegalStateException("should not be here...")
+      case t =>
+        throw new IllegalStateException("should not be here...", t)
     }.get
 
   private def accessor(k: String)(c: Option[Context], m: Option[Any]) =
@@ -198,11 +193,12 @@ case class Offer(m: Map[String, Option[Any]]) {
 
   // TODO can this somehow be compiled with reflection over annotated accessor methods above? Also along with necessary converters? How about the "typed keys"?
   private lazy val accessors: String => ((Option[Context], Option[Any]) => Any) = Map(
+    brand.k -> ((c, m) => brand),
     sku.k -> ((c, m) => sku),
-    title.k -> ((c, m) => title(c.getOrElse(defaultContext)))
-    //    categoryPaths.k -> ((c, m) => categoryPath),
+    title.k -> ((c, m) => title(c.getOrElse(defaultContext))),
+    categoryPaths.k -> ((c, m) => categoryPath),
     //    images.k -> ((c, m) => image(c.getOrElse(defaultContext))),
-    //    price.k -> ((c, m) => price(c.getOrElse(defaultContext))),
+    price.k -> ((c, m) => price(c.getOrElse(defaultContext)))
     //    attributes.k -> ((c, m) => accessorWithTypedKey[String](m, attribute)),
     //    shippingComponents.k -> ((c, m) => accessorWithTypedKey[PaymentMethod](m, p => shippingComponent(c.getOrElse(defaultContext), p))),
     //    shippingCosts.k -> ((c, m) => accessorWithTypedKey[PaymentMethod](m, p => shippingCosts(c.getOrElse(defaultContext), p)))
@@ -213,12 +209,12 @@ case class Offer(m: Map[String, Option[Any]]) {
     Try(accessorMethod(m.get.asInstanceOf[M])).recover {
       case e: NoSuchElementException =>
         println("Empty map key")
-        noAccess
+        NoAccess
       case e: ClassCastException =>
         println("Wrong map key type(" + e + ")")
-        noAccess
-      case _ =>
-        throw new IllegalStateException("should not be here...")
+        NoAccess
+      case t =>
+        throw new IllegalStateException("should not be here...", t)
     }.get
 
   // special stuff
@@ -249,11 +245,11 @@ case class Offer(m: Map[String, Option[Any]]) {
     * Access instance ignoring any values passed to accept(), returning the unmodified Offer (Offer.this),
     * and throwing an exception when calling latest().
     */
-  private lazy val noAccess = new Access[Offer, Any] {
+  private case object NoAccess extends Access[Offer, Any] {
 
     def accept(v: Any) = Offer.this
 
-    def latest = throw new NoSuchElementException("noAccess.latest")
+    def latest = throw new NoSuchElementException("NoAccess.latest")
   }
 
   /**
@@ -282,10 +278,8 @@ case class Offer(m: Map[String, Option[Any]]) {
 
     def remove = Offer(m - k) // if the complete binding is removed, the property is ignored in OS
   }
-
 }
 
 object Offer {
   def create = new Offer()
 }
-

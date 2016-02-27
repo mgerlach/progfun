@@ -1,18 +1,28 @@
 import de.idealo.services.core.config.ContextRegistryConfiguration
 import offer5.{Json, Offer}
+
 val contextRegistry = new ContextRegistryConfiguration().contextRegistry
 val Global = contextRegistry.getGlobal
 val DE = contextRegistry.getContext("DE")
+
 val o1 = Offer.create
 val o2 = o1.sku.accept("SKU")
 val o3 = o2.title(DE).accept("Titel").title(Global).accept("title")
 
-val o4 = o2.title("DE").accept("Titel").title("0").accept("title")
+// val o3s = o2.title("DE").accept("Titel").title("0").accept("title")
 
-val o5 = o2.acceptRaw("title")(c = Option("DE"))("Titel")
+val o4 = o3.brand.clear
 
-// TODO npe for unknown context should fall back to default ("0") with warning
+Json.serialize(o3)
+Json.serialize(o4)
 
+val o6 = o4.acceptRaw("title")(c = Option("DE_"))("Titel")
+
+val o7 = o6.acceptRaw("categoryPaths")()("C1").categoryPath.accept("C2")
+val o8 = o7.acceptRaw("price")(c = Option("DE"))("20")
+Json.serialize(o8)
+
+Json.deserialize[Offer]("{\"categoryPaths\":{\"value\":[\"C1\",\"C2\"]},\"sku\":{\"value\":\"SKU\"},\"price\":{\"value\":{\"DE\":2000}},\"brand\":{\"value\":null},\"title\":{\"value\":{\"DE\":\"Titel\",\"0\":\"Titel\"}}}")
 //val o4 = o3.categoryPath.accept("C1")
 //val o5 = o4.categoryPath.accept("C2")
 //val o6 = o5.image(Global).accept("http://image1_0")
@@ -37,7 +47,3 @@ val o5 = o2.acceptRaw("title")(c = Option("DE"))("Titel")
 //val o12 = o11.attribute("Color").accept("red").attribute("Color").accept("green")
 //val o13 = o12.acceptRaw("shippingCosts")(Option(DE), Option(cod))("1.99")
 
-
-Json.serialize(o3)
-Json.serialize(o4)
-Json.deserialize[Offer]("{\"categoryPaths\":[\"C1\",\"C2\"],\"sku\":\"SKU\",\"shippingCosts\":{\"DE\":{\"pp\":300,\"cod\":199},\"0\":{\"pp\":700}},\"price\":{\"DE\":10000},\"attributes\":{\"Color\":[\"red\",\"green\"]},\"shippingComponents\":{\"DE\":{\"pp\":[100,200]},\"0\":{\"pp\":[300,400]}},\"title\":{\"DE\":\"Titel\",\"0\":\"title\"},\"images\":{\"0\":[\"http://image1_0\",\"http://image2_0\"],\"DE\":[\"http://image1_DE\",\"NochnBild\"]}}")
