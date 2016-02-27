@@ -171,7 +171,8 @@ case class Offer(m: Map[String, Option[Any]]) {
       case _ => accessor(k)(c.flatMap(cs => Option(contextRegistry.getContext(cs))), m).accept(v)
     }
 
-  def latest(k: String)(c: Option[String] = Option(defaultContext.getName), m: Option[String] = None): Option[Any] = accessor(k)(c.map(contextRegistry.getContext), m).latest
+  def latest(k: String)(c: Option[String] = Option(defaultContext.getName), m: Option[String] = None): Option[Any] =
+    accessor(k)(c.flatMap(cs => Option(contextRegistry.getContext(cs))), m).latest
 
   private val contextRegistry = new ContextRegistryConfiguration().contextRegistry
 

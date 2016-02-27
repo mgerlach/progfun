@@ -21,7 +21,7 @@ val o6 = o4.acceptRaw("title")(c = Option("DE_"))("Titel")
 val o7 = o6.acceptRaw("categoryPaths")()("C1").categoryPath.accept("C2")
 val o8 = o7.acceptRaw("price")(c = Option("DE"))("20")
 Json.serialize(o8)
-
+o8.latest("price")(c = Option("DE_"))
 Json.deserialize[Offer]("{\"categoryPaths\":{\"value\":[\"C1\",\"C2\"]},\"sku\":{\"value\":\"SKU\"},\"price\":{\"value\":{\"DE\":2000}},\"brand\":{\"value\":null},\"title\":{\"value\":{\"DE\":\"Titel\",\"0\":\"Titel\"}}}")
 //val o4 = o3.categoryPath.accept("C1")
 //val o5 = o4.categoryPath.accept("C2")
