@@ -20,11 +20,10 @@ object Json {
   val mapper = new ObjectMapper()
   mapper.registerModule(DefaultScalaModule)
   mapper.registerModule(new SimpleModule("ImmutableOffer", new Version(0, 0, 1, null, null, null))
-    //.addKeyDeserializer(classOf[Context], new ContextKeyDeserializer(new ContextRegistryConfiguration().contextRegistry()))
     .addKeySerializer(classOf[Context], new ContextSerializer())
     .addSerializer(classOf[Offer], OfferSerializer)
-    .addDeserializer(classOf[Offer], OfferDeserializer)
-    .addSerializer(classOf[Option[Any]], OptionSerializer))
+    .addSerializer(classOf[Option[Any]], OptionToNullableMapBindingSerializer)
+    .addDeserializer(classOf[Offer], OfferDeserializer))
 
   def serialize(value: Any): String = {
     import java.io.StringWriter
@@ -53,8 +52,8 @@ object Json {
   }
 }
 
-// for top level properties wrapped in Option, either a map
-object OptionSerializer extends StdSerializer[Option[Any]](classOf[Option[Any]]) {
+// for top level properties wrapped in Option, serialized as single-entry map with nullable value binding
+object OptionToNullableMapBindingSerializer extends StdSerializer[Option[Any]](classOf[Option[Any]]) {
   def serialize(value: Option[Any], jgen: JsonGenerator, provider: SerializerProvider): Unit =
     jgen.writeObject(value.map(v => Map("value" -> v)).getOrElse(Map("value" -> null)))
 }
@@ -71,7 +70,10 @@ object OfferDeserializer extends JsonDeserializer[Offer]() {
     printNode("Offer", n, 0)
 
     Offer.create
+    //parse(n, Offer.create)
   }
+
+
 
   def printNode(name: String, n: JsonNode, depth: Int): Unit = {
     for (d <- 0.until(depth)) print(".")

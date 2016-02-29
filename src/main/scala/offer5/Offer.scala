@@ -110,16 +110,16 @@ case class Offer(m: Map[String, Option[Any]]) {
   lazy val categoryPath: Access[Offer, String] =
     CompositeAccess(categoryPaths, ListAccess(categoryPaths.latest.getOrElse(Nil)))
 
-  //  lazy val images = TopLevelAccess[Map[Context, List[String]]]("images")
-  //
-  //  def images(c: Context): Access[Offer, List[String]] =
-  //    CompositeAccess(images, MapAccess(images.latest.getOrElse(Map.empty), c))
-  //
-  //  def image(c: Context): Access[Offer, String] = {
-  //    val ctxImages = images(c)
-  //    CompositeAccess(ctxImages, ListAccess(ctxImages.latest.getOrElse(Nil)))
-  //  }
-  //
+  lazy val images = TopLevelAccess[Map[String, List[String]]]("images")
+
+  def images(c: Context): Access[Offer, List[String]] =
+    CompositeAccess(images, ContextMapAccess(images.latest.getOrElse(Map.empty), c))
+
+  def image(c: Context): Access[Offer, String] = {
+    val ctxImages = images(c)
+    CompositeAccess(ctxImages, ListAccess(ctxImages.latest.getOrElse(Nil)))
+  }
+
   lazy val price = TopLevelAccess[Map[String, Int]]("price")
 
   def price(c: Context): Access[Offer, Int] =
@@ -198,7 +198,7 @@ case class Offer(m: Map[String, Option[Any]]) {
     sku.k -> ((c, m) => sku),
     title.k -> ((c, m) => title(c.getOrElse(defaultContext))),
     categoryPaths.k -> ((c, m) => categoryPath),
-    //    images.k -> ((c, m) => image(c.getOrElse(defaultContext))),
+    images.k -> ((c, m) => image(c.getOrElse(defaultContext))),
     price.k -> ((c, m) => price(c.getOrElse(defaultContext)))
     //    attributes.k -> ((c, m) => accessorWithTypedKey[String](m, attribute)),
     //    shippingComponents.k -> ((c, m) => accessorWithTypedKey[PaymentMethod](m, p => shippingComponent(c.getOrElse(defaultContext), p))),
@@ -278,7 +278,9 @@ case class Offer(m: Map[String, Option[Any]]) {
     def isClear = m.get(k).exists(o => o.isEmpty)
 
     def remove = Offer(m - k) // if the complete binding is removed, the property is ignored in OS
+
   }
+
 }
 
 object Offer {

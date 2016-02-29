@@ -1,10 +1,8 @@
 import de.idealo.services.core.config.ContextRegistryConfiguration
 import offer5.{Json, Offer}
-
 val contextRegistry = new ContextRegistryConfiguration().contextRegistry
 val Global = contextRegistry.getGlobal
 val DE = contextRegistry.getContext("DE")
-
 val o1 = Offer.create
 val o2 = o1.sku.accept("SKU")
 val o3 = o2.title(DE).accept("Titel").title(Global).accept("title")
@@ -20,9 +18,10 @@ val o6 = o4.acceptRaw("title")(c = Option("DE_"))("Titel")
 
 val o7 = o6.acceptRaw("categoryPaths")()("C1").categoryPath.accept("C2")
 val o8 = o7.acceptRaw("price")(c = Option("DE"))("20")
-Json.serialize(o8)
-o8.latest("price")(c = Option("DE_"))
-Json.deserialize[Offer]("{\"categoryPaths\":{\"value\":[\"C1\",\"C2\"]},\"sku\":{\"value\":\"SKU\"},\"price\":{\"value\":{\"DE\":2000}},\"brand\":{\"value\":null},\"title\":{\"value\":{\"DE\":\"Titel\",\"0\":\"Titel\"}}}")
+val o9 = o8.image(DE).accept("img1").image(DE).accept("img2").image(Global).accept("imgG")
+Json.serialize(o9)
+o9.latest("price")(c = Option("DE_"))
+Json.deserialize[Offer]("{\"categoryPaths\":{\"value\":[\"C1\",\"C2\"]},\"sku\":{\"value\":\"SKU\"},\"price\":{\"value\":{\"DE\":2000}},\"brand\":{\"value\":null},\"title\":{\"value\":{\"DE\":\"Titel\",\"0\":\"Titel\"}},\"images\":{\"value\":{\"DE\":[\"img1\",\"img2\"],\"0\":[\"imgG\"]}}}")
 //val o4 = o3.categoryPath.accept("C1")
 //val o5 = o4.categoryPath.accept("C2")
 //val o6 = o5.image(Global).accept("http://image1_0")
