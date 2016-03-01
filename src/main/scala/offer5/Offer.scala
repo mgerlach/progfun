@@ -48,7 +48,7 @@ abstract class MapAccess[K, V](m: Map[String, V], k: K, toKeyString: K => String
   def accept(v: V) = m updated(keyString, v)
 }
 
-case class StringMapAccess[V](m: Map[String, V], s: String) extends MapAccess[String, V](m, s, s => s)
+case class StringMapAccess[V](m: Map[String, V], s: String) extends MapAccess[String, V](m, s)
 
 case class ContextMapAccess[V](m: Map[String, V], c: Context) extends MapAccess[Context, V](m, c, c => c.getName)
 
@@ -171,8 +171,30 @@ case class Offer(m: Map[String, Option[Any]]) {
       case _ => accessor(k)(c.flatMap(cs => Option(contextRegistry.getContext(cs))), m).accept(v)
     }
 
+  // TODO better (for CSV mapping)
+  // acceptRaw(k: String)(ks: Option[String]*)(v: String): Offer
+  // the accessor  structure should then provide the converters for the ks (intermediate map keys like Context)
+  // as well as a value converter for v. Defaults like Global context could also be provided that way.
+
+  // TODO for Json deserialization we might need a typed v - at least distinguishing strings and (integer) numbers
+  // acceptRaw(k: String)(ks: Option[String]*)(v: Any): Offer
+  // the value of v needs to interpreted correctly at leaf accessor level
+
   def latest(k: String)(c: Option[String] = Option(defaultContext.getName), m: Option[String] = None): Option[Any] =
     accessor(k)(c.flatMap(cs => Option(contextRegistry.getContext(cs))), m).latest
+
+  // TODO better:
+  // latest(k: String)(ks: Option[String]*): Option[Any]
+
+  // TODO for JSON null need to call reset at top level, should be handled internally...
+  // TODO more generic, from reflection?
+  lazy val topLevel = Map(
+    brand.k -> brand,
+    sku.k -> sku,
+    title.k -> title,
+    categoryPaths.k -> categoryPaths,
+    images.k -> images,
+    price.k -> price)
 
   private val contextRegistry = new ContextRegistryConfiguration().contextRegistry
 
