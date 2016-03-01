@@ -6,18 +6,19 @@ val DE = contextRegistry.getContext("DE")
 val o1 = Offer.create
 val o2 = o1.sku.accept("SKU")
 val o3 = o2.title(DE).accept("Titel").title(Global).accept("title_g")
-
 // val o3s = o2.title("DE").accept("Titel").title("0").accept("title")
-
 val o4 = o3.brand.clear
-
 Json.serialize(o3)
 Json.serialize(o4)
-
-val o6 = o4.acceptRaw("title")(c = Option("DE_"))("title")
-
+print("----")
+val o6 = o4.acceptRaw("title")("DE_")("title")
+print("----")
 val o7 = o6.acceptRaw("categoryPaths")()("C1").categoryPath.accept("C2")
-val o8 = o7.acceptRaw("price")(c = Option("DE"))("20")
+print("----")
+val o8 = o7.acceptRaw("price")("DE")("20")
+print("----")
+o8.image(DE)
+print("----")
 val o9 = o8.image(DE).accept("img1").image(DE).accept("img2").image(Global).accept("imgG")
 Json.serialize(o9)
 o9.latest("price")(c = Option("DE_"))

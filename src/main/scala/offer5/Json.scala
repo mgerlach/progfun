@@ -70,23 +70,26 @@ object OfferDeserializer extends JsonDeserializer[Offer]() {
   def deserialize(p: JsonParser, ctxt: DeserializationContext): Offer = {
     val n: JsonNode = p.getCodec.readTree(p)
 
-    printNode("Offer", n, 0)
+    // printNode("Offer", n, 0)
 
     def parseTopLevel(o: Offer, k: String, n: JsonNode): Offer = {
+
+      def iterateMapKeys(o: Offer, n: JsonNode, keys: Seq[String]): Offer = {
+        if (n.isObject)
+          n.fields().asScala.foldLeft(o)((oAcc, e) => iterateMapKeys(oAcc, e.getValue, keys :+ e.getKey))
+        else if (n.isArray)
+          n.elements().asScala.foldLeft(o)((oAcc, e) => oAcc.acceptRaw(k)(keys: _*)(e.asText)) // TODO e.asText or typed? Converter? Where?
+        else
+          o.acceptRaw(k)(keys: _*)(n.asText)
+      }
 
       // Top level
       Option(n.findValue("value")).map(n =>
         if (n.isNull)
           o.topLevel(k).clear
-
-        // TODO recursive collect of intermediate map keys here (need signature change for acceptRaw to Option[String]*) ...
-
         // TODO ... somehow need an extra accessor level at top level, would be much nicer
-
-        else if (n.isArray)
-          n.elements().asScala.foldLeft(o)((oAcc, e) => oAcc.acceptRaw(k)()(e.asText)) // TODO asText or typed? Converter? Where?
         else
-          o.acceptRaw(k)()(n.asText)
+          iterateMapKeys(o, n, List())
       ).getOrElse(o.topLevel(k).clear) // no value field at top level, should not happen, but treat as null/clear
     }
 
