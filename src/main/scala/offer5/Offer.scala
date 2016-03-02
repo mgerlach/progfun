@@ -58,6 +58,8 @@ abstract class MapAccess[K, V](m: Map[String, V], k: K, toValueType: String => V
   def acceptString(vs: String) = accept(toValueType(vs))
 }
 
+// MapAccess classes with concrete key type
+
 case class StringMapAccess[V](m: Map[String, V], s: String,
                               toValueType: String => V = (s: String) => throw new UnsupportedOperationException("M[String, V] String => V"))
   extends MapAccess[String, V](m, s, toValueType)
