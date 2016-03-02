@@ -2,7 +2,7 @@ package offer5
 
 import de.idealo.services.core.bean.PaymentMethod
 import de.idealo.services.core.config.ContextRegistryConfiguration
-import de.idealo.services.core.context.Context
+import de.idealo.services.core.context.{Context, ContextRegistry}
 
 import scala.annotation.tailrec
 
@@ -115,9 +115,11 @@ case class CompositeAccess[T, V1, V2](a1: Access[T, V1], a2: Access[V1, V2]) ext
   *
   * @param m the map of offer property options representing the offer
   */
-case class Offer(m: Map[String, Option[Any]]) {
+case class Offer(m: Map[String, Option[Any]], contextRegistry: ContextRegistry) {
 
-  def this() = this(Map())
+  def this(contextRegistry: ContextRegistry) = this(Map(), contextRegistry)
+
+  private lazy val defaultContext = contextRegistry.getGlobal
 
   // TYPED ACCESS
 
@@ -212,10 +214,6 @@ case class Offer(m: Map[String, Option[Any]]) {
 
   private def rawToIntPrice(priceString: String): Int = (priceString.toDouble * 100).toInt
 
-  private lazy val contextRegistry = new ContextRegistryConfiguration().contextRegistry
-
-  private lazy val defaultContext = contextRegistry.getGlobal
-
   @tailrec
   private def extractTypedKey[K](keys: Seq[String], i: Int, toKeyType: String => K, default: => K): K =
     keys match {
@@ -288,20 +286,24 @@ case class Offer(m: Map[String, Option[Any]]) {
       */
     def latest = m.getOrElse(k, None).asInstanceOf[Option[V]]
 
-    def accept(v: V) = Offer(m updated(k, Option(v)))
+    def accept(v: V) = Offer(m updated(k, Option(v)), contextRegistry)
 
     def acceptString(vs: String) = accept(toValueType(vs))
 
-    def clear = Offer(m updated(k, None))
+    def clear = Offer(m updated(k, None), contextRegistry)
 
     // check for k -> None (indicated by Some(None) returned by m.get(k)) which indicates to clear the property in OS
     def isClear = m.get(k).exists(o => o.isEmpty)
 
-    def remove = Offer(m - k) // if the complete binding is removed, the property is ignored in OS
+    def remove = Offer(m - k, contextRegistry) // if the complete binding is removed, the property is ignored in OS
   }
 
+  override def toString = "Offer" + m.toString().substring(3) // replace "Map" by "Offer"
 }
 
 object Offer {
-  def create = new Offer()
+
+  private lazy val contextRegistry = new ContextRegistryConfiguration().contextRegistry
+
+  def create = new Offer(contextRegistry)
 }
