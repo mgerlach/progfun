@@ -210,29 +210,26 @@ case class Offer(m: Map[String, Option[Any]]) {
 
   private def rawToIntPrice(priceString: String): Int = (priceString.toDouble * 100).toInt
 
-  private val contextRegistry = new ContextRegistryConfiguration().contextRegistry
+  private lazy val contextRegistry = new ContextRegistryConfiguration().contextRegistry
 
-  private val defaultContext = contextRegistry.getGlobal
+  private lazy val defaultContext = contextRegistry.getGlobal
 
   @tailrec
-  private def extractTypedKeyOrElse[K](keys: Seq[String], i: Int, toKeyType: String => K, default: => K): K = {
-    require(i >= 0)
-    if (i == 0)
-      keys.headOption.map(s => toKeyType(s)).filter(k => k != null).getOrElse(default)
-    else keys match {
-      case head :: tail => extractTypedKeyOrElse(tail, i - 1, toKeyType, default)
+  private def extractTypedKey[K](keys: Seq[String], i: Int, toKeyType: String => K, default: => K): K =
+    keys match {
       case Nil => default
+      case head :: tail if i <= 0 => Option(toKeyType(head)).getOrElse(default)
+      case head :: tail => extractTypedKey(tail, i - 1, toKeyType, default)
     }
-  }
 
   private def extractContext(keys: Seq[String], i: Int): Context =
-    extractTypedKeyOrElse(keys, i, contextRegistry.getContext, defaultContext)
+    extractTypedKey(keys, i, contextRegistry.getContext, defaultContext)
 
   private def extractPaymentMethod(keys: Seq[String], i: Int): PaymentMethod =
-    extractTypedKeyOrElse(keys, i, PaymentMethod.valueOf, throw new IllegalArgumentException("Cannot extract payment method from pos " + i + " of " + keys))
+    extractTypedKey(keys, i, PaymentMethod.valueOf, throw new IllegalArgumentException("Cannot extract payment method from pos " + i + " of " + keys))
 
   private def extractAttribute(keys: Seq[String], i: Int): String =
-    extractTypedKeyOrElse(keys, i, identity, throw new IllegalArgumentException("Cannot extract attribute from pos " + i + " of " + keys))
+    extractTypedKey(keys, i, identity, throw new IllegalArgumentException("Cannot extract attribute from pos " + i + " of " + keys))
 
   private def accessor(k: String)(keys: Seq[String]) = accessors(k)(keys).asInstanceOf[Access[Offer, Any]]
 
