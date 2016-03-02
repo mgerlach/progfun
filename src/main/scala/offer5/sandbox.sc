@@ -1,3 +1,4 @@
+import de.idealo.services.core.bean.PaymentMethod._
 import de.idealo.services.core.config.ContextRegistryConfiguration
 import offer5.{Json, Offer}
 val contextRegistry = new ContextRegistryConfiguration().contextRegistry
@@ -11,18 +12,33 @@ val o4 = o3.brand.clear
 Json.serialize(o3)
 Json.serialize(o4)
 print("----")
-val o6 = o4.acceptRaw("title")("DE_")("title")
+val o6 = o4.acceptRaw("title")(List("DE_"))("title")
 print("----")
 val o7 = o6.acceptRaw("categoryPaths")()("C1").categoryPath.accept("C2")
 print("----")
-val o8 = o7.acceptRaw("price")("DE")("20")
+o7.acceptRaw("price")_
+val o8 = o7.acceptRaw("price")(List("DE"))("20")
 print("----")
 o8.image(DE)
 print("----")
-val o9 = o8.image(DE).accept("img1").image(DE).accept("img2").image(Global).accept("imgG")
-Json.serialize(o9)
-o9.latest("price")(c = Option("DE_"))
-Json.deserialize[Offer]("{\"categoryPaths\":{\"value\":[\"C1\",\"C2\"]},\"sku\":{\"value\":\"SKU\"},\"price\":{\"value\":{\"DE\":2000}},\"brand\":{\"value\":null},\"title\":{\"value\":{\"DE\":\"Titel\",\"0\":\"title\"}},\"images\":{\"value\":{\"DE\":[\"img1\",\"img2\"],\"0\":[\"imgG\"]}}}")
+val o8a = o8.image(DE).accept("img1").image(DE).accept("img2").image(Global).accept("imgG")
+val o8b = o8a.acceptRaw("shippingCosts")(List("DE", "cod"))("2.50")
+val o8c = o8b.shippingComponent(DE, pp).accept(100)
+  .shippingComponent(DE, pp).accept(200)
+  .shippingComponents(Global, pp).accept(List(300, 400))
+val o9 = o8c.acceptRaw("attributes")(List("bla"))("blubb")
+  .acceptRaw("attributes")(List("bla"))("blubber")
+  .acceptRaw("attributes")(List("foo"))("bar")
+val ser9 = Json.serialize(o9.sumUpShippingComponents())
+val o10 = Json.deserialize[Offer](ser9)
+val ser10 = Json.serialize(o10)
+assert(ser9 == ser10, "ser -> deser -> ser should not change")
+o10.sku.latest
+o10.latest("sku")()
+o10.latest("shippingCosts")(Seq("DE", "pp"))
+o10.attributes("foo").latest
+o10.latest("attributes")(Seq("foo"))
+
 //val o4 = o3.categoryPath.accept("C1")
 //val o5 = o4.categoryPath.accept("C2")
 //val o6 = o5.image(Global).accept("http://image1_0")
