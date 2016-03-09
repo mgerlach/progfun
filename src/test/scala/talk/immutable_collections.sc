@@ -1,9 +1,11 @@
-// --- immutable cons lists
+
+
+// --- immutable linear sequences (e.g., List)
 
 Nil
 val emptyList : List[Nothing] = Nil
 
-val list1cons = "e1" :: emptyList
+val list1cons = "e1" :: emptyList // cons operator (see Lisp, Scheme, etc.), only for List!
 val list1left = emptyList :+ "e1"
 val list1right = "e1" +: emptyList
 
@@ -27,9 +29,9 @@ list4 +:= "e4" // e4, e1 !!!
 list4
 list1left
 
-// --- immutable lists / Vector implementation (more efficient operations on large data sets)
+// --- immutable indexed sequences (e.g. Vector, more efficient operations on larger data sets)
 
-val emptyVector : Vector[Nothing] = Vector()
+val emptyVector : Seq[Nothing] = Seq()
 
 val vec1left = emptyVector :+ "e1"
 val vec1right = "e1" +: emptyVector
