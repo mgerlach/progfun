@@ -22,7 +22,7 @@ for {
 } yield (i, j)
 
 def scalarProduct1(xs: List[Double], ys: List[Double]): Double =
-  (xs zip ys).map { case (x, y) => x * y }.sum
+  (xs zip ys).map { case (xx, yy) => xx * yy }.sum
 scalarProduct1(List(2, 1, 3), List(1, 2, 3))
 def scalarProduct(xs: List[Double], ys: List[Double]): Double =
   (for ((x, y) <- xs zip ys) yield x * y).sum

@@ -1,3 +1,5 @@
+// --- immutable cons lists
+
 Nil
 val emptyList : List[Nothing] = Nil
 
@@ -7,7 +9,9 @@ val list1right = "e1" +: emptyList
 
 val list2cons = "e1" :: "e2" :: Nil // List("e1", "e2")
 val list2left = list1cons :+ "e2"
-val list2right = "e2" +: list1cons // OOPS
+val list2left_methodCall = list1cons.:+("e2")
+val list2right = "e2" +: list1cons
+val list2right_methodCall = list1cons.+:("e2") // OOPS
 val list2rightcons  = "e2" :: list1cons // same OOPS
 
 list1cons ::: list2cons
@@ -23,6 +27,8 @@ list4 +:= "e4" // e4, e1 !!!
 list4
 list1left
 
+// --- immutable lists / Vector implementation (more efficient operations on large data sets)
+
 val emptyVector : Vector[Nothing] = Vector()
 
 val vec1left = emptyVector :+ "e1"
@@ -35,6 +41,27 @@ var vec3 = vec1left
 vec3 :+= "e3"
 vec3
 vec1left
+
+// --- immutable sets
+
+val emptySet : Set[Nothing] = Set()
+
+val set1left = emptySet + "e1" // ??? Set()e1 ... string repr... type confusion
+val emptyStrSet = emptySet.toSet[String]
+
+val set1leftBetter = emptyStrSet + "e1" // ahhh... Set(e1)
+val set1right = "e1" + emptyStrSet // does not work with Sets ... e1Set() string repr
+
+val set2left = set1leftBetter + "e2"
+
+set1leftBetter ++ set2left
+
+var set3 = set1leftBetter
+set3 += "e3"
+set3
+set1leftBetter
+
+// --- immutable maps
 
 val m = Map.empty // == Map() == new Map()
 
