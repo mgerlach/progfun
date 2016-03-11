@@ -1,8 +1,8 @@
 import collections._
 
 val x: ConsList[String] = Nil
-val set1 = EmptyIntSet.incl(10).incl(2).incl(11).incl(5).incl(6)
-val set2 = EmptyIntSet.incl(100).incl(2).incl(4).incl(11).incl(3)
+val set1 = EmptyIntSet.add(10).add(2).add(11).add(5).add(6)
+val set2 = EmptyIntSet.add(100).add(2).add(4).add(11).add(3)
 set1 union set2
 
 collections.ConsList(1, 2)
